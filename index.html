@@ -116,7 +116,7 @@
 <div class="wrap">
   <div class="masthead">
     <h1>Simulated&nbsp;Firework</h1>
-    <div class="sub">a token, a match, and <b>n</b> processes in a ring</div> <!-- < &mdash; span id="cue" class="blink">press start</span>-->
+    <div class="sub">a token, a match, and <b>n</b> processes in a ring</div>
   </div>
 
   <div class="stage">
@@ -144,8 +144,8 @@
       <div class="box">
         <h2>SCORE</h2>
         <div class="scoreboard">
-          <div class="score"><div class="k">rounds</div><div class="v yel" id="s-rounds">0</div></div>
-          <div class="score"><div class="k">rockets</div><div class="v pink" id="s-rockets">0</div></div>
+          <div class="score"><div class="k">rounds</div><div class="v" id="s-rounds">0</div></div>
+          <div class="score"><div class="k">rockets</div><div class="v" id="s-rockets">0</div></div>
           <div class="score"><div class="k">empty</div><div class="v" id="s-empty">0<small>/k</small></div></div>
           <div class="score"><div class="k">last ms</div><div class="v" id="s-rt">&mdash;</div></div>
           <div class="score"><div class="k">holder</div><div class="v" id="s-holder">&mdash;</div></div>
@@ -179,23 +179,14 @@
       <div class="log" id="log"></div>
     </div>
   </div>
-
-  <!--<footer>
-    <b>Same protocol as your code:</b> per-node p halves each hold, broadcast = pixel burst,<br>node 0 coordinates, ring goes dark after k empty rounds.
-  </footer> -->
 </div>
 
 <script>
-// preload a real WAV for low-latency playback (place your boom.wav next to this HTML)
 const boomAudio = new Audio('boom2.wav');
 boomAudio.preload = 'auto';
 boomAudio.volume = 0.9;
 function playBoom(){
-  try{
-    // rewind and play; ignore promise rejection (autoplay restrictions)
-    boomAudio.currentTime = 0;
-    boomAudio.play().catch(()=>{});
-  }catch(e){}
+  try{ boomAudio.currentTime = 0; boomAudio.play().catch(()=>{}); }catch(e){}
 }
 (function () {
   "use strict";
@@ -227,7 +218,6 @@ function playBoom(){
     speed: document.getElementById('v-speed'),
   };
 
-  // palette for firework bursts (flat retro colors, no gradients)
   const PAL = ['#ff4d6d','#ffd23f','#4dff9e','#4dd0ff','#c77dff','#ff9b3f'];
 
   let P = { n: 16, p0: 0.5, decay: 0.5, k: 3, speed: 1 };
@@ -236,10 +226,10 @@ function playBoom(){
   let stats = { rounds: 0, rockets: 0, empty: 0 };
   let running = false, paused = false, finished = false;
   let roundStart = 0, holdsThisRound = 0, firedThisRound = 0;
-  const SCALE = 5;                 // low-res pixel buffer factor
+  const SCALE = 5;
   const TRAVEL_MS = 520;
   let hopElapsed = 0, lastTs = 0;
-  let W = 0, H = 0;                 // low-res buffer dimensions
+  let W = 0, H = 0;
 
   function resize() {
     const r = canvas.getBoundingClientRect();
@@ -270,7 +260,6 @@ function playBoom(){
     while (el.log.childNodes.length > 80) el.log.removeChild(el.log.lastChild);
   }
 
-  // --- protocol step (faithful to FireworkNode.maybeFire) ---
   function holderActs(i) {
     const node = nodes[i];
     holdsThisRound++;
@@ -281,7 +270,7 @@ function playBoom(){
       playBoom();
       log(`<span class="t">r${stats.rounds+1}</span> node <b style="color:#1a1a1a">${i}</b> <span class="fire">^ ROCKET #${stats.rockets}</span> <span class="t">p=${node.p.toFixed(3)}</span>`);
     }
-    node.p *= P.decay;                 // decay every hold, like the code
+    node.p *= P.decay;
     if (holdsThisRound > P.n) closeRound();
   }
   function closeRound() {
@@ -297,7 +286,7 @@ function playBoom(){
     finished = true; running = false; paused = false;
     el.btnStart.disabled = false; el.btnStart.textContent = 'Start';
     el.btnPause.disabled = true;
-    el.cue.classList.remove('blink'); el.cue.textContent = 'game over';
+    if(el.cue){ el.cue.classList.remove('blink'); el.cue.textContent = 'game over'; }
     log(`<span class="term">> RING DARK — ${P.k} empty rounds. ${stats.rounds} rounds, ${stats.rockets} rockets.</span>`);
     el.goStats.innerHTML = `ROUNDS <b>${stats.rounds}</b><br>ROCKETS <b>${stats.rockets}</b><br>NODES <b>${P.n}</b>`;
     el.gameover.classList.add('show');
@@ -339,7 +328,6 @@ function playBoom(){
   function draw() {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,W,H);
 
-    // ring edges (dotted retro)
     ctx.fillStyle = '#241d38';
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i], b = nodes[(i+1)%nodes.length];
@@ -351,7 +339,6 @@ function playBoom(){
       }
     }
 
-    // ripples (multicast)
     for (let i = ripples.length-1; i>=0; i--) {
       const rp = ripples[i]; rp.r += 0.8*(P.speed*0.5+0.6); rp.life -= 0.03;
       if (rp.life <= 0) { ripples.splice(i,1); continue; }
@@ -362,7 +349,6 @@ function playBoom(){
       }
     }
 
-    // nodes (squares)
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
       if (node.flash > 0) {
@@ -373,28 +359,26 @@ function playBoom(){
       if (node.flash > 0.4) c = '#ff4d6d';
       else if (i === token.to && running && !finished) c = '#4dd0ff';
       px(node.x-2, node.y-2, 4, 4, c);
-      if (i === 0) { // coordinator ring marker
+      if (i === 0) {
         ctx.fillStyle = '#ffd23f';
         ctx.fillRect(node.x-4, node.y-4, 9, 1); ctx.fillRect(node.x-4, node.y+3, 9, 1);
         ctx.fillRect(node.x-4, node.y-4, 1, 9); ctx.fillRect(node.x+3, node.y-4, 1, 9);
       }
     }
 
-    // the match (token) — a little yellow sprite
     if (running && !finished) {
       const a = nodes[token.from], b = nodes[token.to], tt = ease(token.t);
       const tx = a.x + (b.x-a.x)*tt, ty = a.y + (b.y-a.y)*tt;
       px(tx-1, ty-1, 3, 3, '#ffd23f');
-      px(tx, ty-2, 1, 1, '#fff');           // spark tip
+      px(tx, ty-2, 1, 1, '#fff');
     }
 
-    // particles (chunky, stepped fade)
     for (let i = particles.length-1; i>=0; i--) {
       const p = particles[i];
       p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.vx *= 0.97; p.vy *= 0.97;
       p.life -= p.decay;
       if (p.life <= 0) { particles.splice(i,1); continue; }
-      ctx.globalAlpha = p.life > 0.66 ? 1 : p.life > 0.33 ? 0.6 : 0.3;   // quantized
+      ctx.globalAlpha = p.life > 0.66 ? 1 : p.life > 0.33 ? 0.6 : 0.3;
       px(p.x, p.y, p.size, p.size, p.col);
     }
     ctx.globalAlpha = 1;
@@ -411,7 +395,6 @@ function playBoom(){
     }
   }
 
-  // ---- params / controls ----
   function readParams(){ P.n=+sliders.n.value; P.p0=+sliders.p0.value; P.decay=+sliders.decay.value; P.k=+sliders.k.value; P.speed=+sliders.speed.value; }
   function syncLabels(){
     labels.n.textContent = sliders.n.value;
@@ -429,7 +412,7 @@ function playBoom(){
     readParams(); if (nodes.length !== P.n) buildNodes();
     running = true; paused = false; finished = false;
     el.gameover.classList.remove('show');
-    el.cue.classList.remove('blink'); el.cue.textContent = 'running';
+    if(el.cue){ el.cue.classList.remove('blink'); el.cue.textContent='running'; }
     roundStart = performance.now(); holdsThisRound = 1;
     token = { from:0, to:1%P.n, t:0, holder:0 }; hopElapsed = 0;
     el.btnStart.disabled = true; el.btnPause.disabled = false; el.btnPause.textContent = 'Pause';
@@ -437,7 +420,13 @@ function playBoom(){
     log(`<span class="round">> start</span> <span class="t">n=${P.n} p0=${P.p0} decay=${P.decay} k=${P.k}</span>`);
     holderActs(0);
   }
-  function pause(){ if(!running) return; paused=!paused; el.btnPause.textContent=paused?'Resume':'Pause'; el.cue.textContent=paused?'paused':'running'; }
+  function pause(){
+    if(!running) return;
+    paused=!paused;
+    el.btnPause.textContent=paused?'Resume':'Pause';
+    if(el.cue) el.cue.textContent=paused?"paused":"running";
+    if(paused) boomAudio.pause();
+  }
   function reset(){
     running=false; paused=false; finished=false;
     readParams(); buildNodes(); particles=[]; ripples=[];
@@ -447,7 +436,7 @@ function playBoom(){
     el.btnStart.disabled=false; el.btnStart.textContent='Start';
     el.btnPause.disabled=true; el.btnPause.textContent='Pause';
     el.gameover.classList.remove('show');
-    el.cue.classList.add('blink'); el.cue.textContent='press start';
+    if(el.cue){ el.cue.classList.add('blink'); el.cue.textContent='press start'; }
     [sliders.n,sliders.p0,sliders.decay,sliders.k].forEach(s => s.disabled=false);
     el.log.innerHTML=''; updatePanel();
   }
@@ -456,7 +445,6 @@ function playBoom(){
   el.btnReset.addEventListener('click', reset);
   window.addEventListener('resize', resize);
 
-  // ---- load your real summary.json (Aufgabe 1 results) ----
   el.file.addEventListener('change', (e) => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
@@ -465,7 +453,6 @@ function playBoom(){
   });
   function pick(o, keys){ for (const k of keys) if (o[k] !== undefined) return o[k]; return undefined; }
   function renderHiScores(data, name) {
-    // tolerant: accept array of rows, or object keyed by n
     let rows = [];
     if (Array.isArray(data)) rows = data;
     else if (data && typeof data === 'object') {
@@ -493,7 +480,6 @@ function playBoom(){
     el.hiwrap.innerHTML = html;
   }
 
-  // boot
   syncLabels(); readParams(); buildNodes(); resize();
   requestAnimationFrame(frame);
 })();
