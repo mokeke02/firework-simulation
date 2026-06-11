@@ -421,11 +421,11 @@ function playBoom(){
     holderActs(0);
   }
   function pause(){
-  if(!running) return;
-  paused=!paused;
-  el.btnPause.textContent=paused?'Resume':'Pause';
-  if(el.cue) el.cue.textContent=paused?'paused':'running';
-  if(paused) boomAudio.pause();
+    if(!running) return;
+    paused=!paused;
+    el.btnPause.textContent=paused?'Resume':'Pause';
+    if(el.cue) el.cue.textContent=paused?"paused":"running";
+    if(paused) boomAudio.pause();
   }
   function reset(){
     running=false; paused=false; finished=false;
