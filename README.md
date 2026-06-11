@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Verteilte Systeme – Übungsblatt 1: A Firework of UDP Messages
 
 A logical ring of `n` processes passes a token; the token holder fires a
@@ -93,3 +94,6 @@ API (with a local stub so it reads standalone); it was validated by inspection
 and via the Python twin because the build sandbox used here had a Java runtime
 only (no `javac`) and no network to clone the simulator. On a standard machine
 the Java compiles and runs as shown above.
+=======
+# firework-simulation
+>>>>>>> 806f5159ad867bf1f9596bfb68510f8b3b430ee0
