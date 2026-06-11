@@ -1,0 +1,1 @@
+{"id": 0, "n": 4, "role": "coordinator", "rockets_sent": 0, "rockets_received": 2, "rockets_dropped": 0, "gaps_detected": 0, "total_rounds": 4, "total_firings": 2, "round_time_min_ms": 2.012791999732144, "round_time_avg_ms": 2.8662295026151696, "round_time_max_ms": 4.273584003385622, "round_times_ms": [4.273584003385622, 3.0777080028201453, 2.100834004522767, 2.012791999732144]}

@@ -1,0 +1,101 @@
+{
+  "max_n": 256,
+  "rows": [
+    {
+      "n": 2,
+      "total_rounds": 4,
+      "total_multicasts": 1,
+      "round_time_min_ms": 0.8875,
+      "round_time_avg_ms": 1.2577,
+      "round_time_max_ms": 1.983,
+      "rockets_fired": 1,
+      "rockets_seen_min": 1,
+      "rockets_seen_max": 1,
+      "gaps_detected": 0
+    },
+    {
+      "n": 4,
+      "total_rounds": 4,
+      "total_multicasts": 2,
+      "round_time_min_ms": 1.514,
+      "round_time_avg_ms": 2.0068,
+      "round_time_max_ms": 3.3545,
+      "rockets_fired": 2,
+      "rockets_seen_min": 2,
+      "rockets_seen_max": 2,
+      "gaps_detected": 0
+    },
+    {
+      "n": 8,
+      "total_rounds": 7,
+      "total_multicasts": 9,
+      "round_time_min_ms": 2.5434,
+      "round_time_avg_ms": 3.947,
+      "round_time_max_ms": 6.5643,
+      "rockets_fired": 9,
+      "rockets_seen_min": 9,
+      "rockets_seen_max": 9,
+      "gaps_detected": 0
+    },
+    {
+      "n": 16,
+      "total_rounds": 9,
+      "total_multicasts": 12,
+      "round_time_min_ms": 2.9025,
+      "round_time_avg_ms": 5.224,
+      "round_time_max_ms": 12.8051,
+      "rockets_fired": 12,
+      "rockets_seen_min": 12,
+      "rockets_seen_max": 12,
+      "gaps_detected": 0
+    },
+    {
+      "n": 32,
+      "total_rounds": 9,
+      "total_multicasts": 26,
+      "round_time_min_ms": 3.8534,
+      "round_time_avg_ms": 7.7788,
+      "round_time_max_ms": 25.0821,
+      "rockets_fired": 26,
+      "rockets_seen_min": 26,
+      "rockets_seen_max": 26,
+      "gaps_detected": 0
+    },
+    {
+      "n": 64,
+      "total_rounds": 9,
+      "total_multicasts": 55,
+      "round_time_min_ms": 8.7812,
+      "round_time_avg_ms": 14.5,
+      "round_time_max_ms": 39.4487,
+      "rockets_fired": 55,
+      "rockets_seen_min": 55,
+      "rockets_seen_max": 55,
+      "gaps_detected": 0
+    },
+    {
+      "n": 128,
+      "total_rounds": 9,
+      "total_multicasts": 123,
+      "round_time_min_ms": 19.1982,
+      "round_time_avg_ms": 36.1698,
+      "round_time_max_ms": 83.6246,
+      "rockets_fired": 123,
+      "rockets_seen_min": 121,
+      "rockets_seen_max": 123,
+      "gaps_detected": 0
+    },
+    {
+      "n": 256,
+      "total_rounds": 12,
+      "total_multicasts": 242,
+      "round_time_min_ms": 36.572,
+      "round_time_avg_ms": 81.0167,
+      "round_time_max_ms": 286.9372,
+      "rockets_fired": 242,
+      "rockets_seen_min": 241,
+      "rockets_seen_max": 242,
+      "gaps_detected": 0
+    }
+  ]
+}

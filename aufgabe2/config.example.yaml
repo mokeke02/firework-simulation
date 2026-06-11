@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# Aufgabe 2 - real distributed deployment of the firework ring.
+#
+# One process per machine. The ring topology is given purely by the *order*
+# of the `peers` list: node i forwards the token to node (i+1) mod n.
+#
+# Copy this file to config.yaml and edit the peer list to match the machines
+# you actually have access to (lab PCs, friends' laptops, VMs, ...).
+#
+# `id` is implicit = index in the list (0-based). Node 0 is the coordinator:
+# it injects the token, owns the round boundary, evaluates the termination
+# rule and broadcasts TERMINATE.
+# ---------------------------------------------------------------------------
+
+# How broadcasts (rockets) are disseminated:
+#   multicast : one UDP multicast datagram per rocket   (preferred)
+#   unicast   : n-1 UDP unicast datagrams per rocket    (fallback when the
+#               network does not forward multicast, e.g. across subnets / WLAN
+#               isolation / cloud VPCs)
+broadcast_mode: multicast
+
+# Multicast configuration (only used when broadcast_mode == multicast).
+# 239.0.0.0/8 is the administratively-scoped (site-local) range.
+# IMPORTANT: across real switches you must raise the TTL above the host-local
+# default of 0. Set FIREWORK_MC_TTL=1 for a single LAN segment, higher to
+# cross routers that are configured to forward multicast.
+multicast:
+  group: 239.1.1.1
+  port: 50007
+  ttl: 1            # exported as FIREWORK_MC_TTL by deploy.sh
+
+# Firework parameters (identical to Aufgabe 1 so results are comparable).
+params:
+  p0: 0.5           # initial ignition probability
+  decay: 0.5        # p <- p * decay each time a node holds the token
+  k: 3              # terminate after k consecutive empty rounds
+  seed: 1
+
+# The ring. Each machine runs exactly one of these.
+# `bind` is the address the process binds its UDP sockets to on THAT machine
+# (use 0.0.0.0 to listen on all interfaces). `host` is how the *other* nodes
+# reach it (its routable IP / DNS name). `port` is its unicast ring port.
+peers:
+  - host: 192.168.0.11   # node 0  (coordinator)
+    port: 51000
+    bind: 0.0.0.0
+  - host: 192.168.0.12   # node 1
+    port: 51000
+    bind: 0.0.0.0
+  - host: 192.168.0.13   # node 2
+    port: 51000
+    bind: 0.0.0.0
+  - host: 192.168.0.14   # node 3
+    port: 51000
+    bind: 0.0.0.0
