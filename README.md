@@ -84,15 +84,3 @@ python3 docs/make_plots.py       # regenerates the figures from aufgabe1/results
 
 See `report/report.md` for the full discussion and `docs/uml.md` for the
 diagrams.
-
-## Environment note
-
-The figures and the Aufgabe 1 table come from **real runs** in this repo. The
-Java for Aufgabe 3/4 is provided and is structured against the real `sim4da-S26`
-API (with a local stub so it reads standalone); it was validated by inspection
-and via the Python twin because the build sandbox used here had a Java runtime
-only (no `javac`) and no network to clone the simulator. On a standard machine
-the Java compiles and runs as shown above.
-=======
-# firework-simulation
->>>>>>> 806f5159ad867bf1f9596bfb68510f8b3b430ee0
