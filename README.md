@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Verteilte Systeme – Übungsblatt 1: A Firework of UDP Messages
 
 A logical ring of `n` processes passes a token; the token holder fires a
