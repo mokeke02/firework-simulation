@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Java compiled output  (keep src/, delete out/)
+aufgabe3-4/out/
+
+# Aufgabe 1 sweep writes a per-run folder for every n (hundreds of tiny JSON
+# files). Only the aggregated summary.* is canonical; I keep run_n384 (proof of
+# the max-n ceiling) and loss_demo (the Aufgabe 4 demo) and ignore the rest.
+aufgabe1/results/run_n*/
+!aufgabe1/results/run_n384/
+aufgabe2/results/run_n*/
+
+# IDE folders
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+__MACOSX/
+
+# Temporary / OS
+*.swp
+*.bak
+Thumbs.db

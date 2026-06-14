@@ -1,39 +1,34 @@
 #!/usr/bin/env python3
 """
 firework_node.py  --  Verteilte Systeme, Uebungsblatt 1 (Sommer 2026)
-=====================================================================
 
-One process in a logical ring ("Overlay-Netzwerk").  A *token* (the
-"Streichholz") circulates around the ring over UNICAST UDP.  A process that
-holds the token fires a firework rocket ("Feuerwerksrakete") with probability
-``p`` -- a BROADCAST that is mapped onto UDP *multicast*.  After deciding, the
-process halves its own ``p`` and forwards the token to its successor.
+One process in the logical ring. The "Streichholz" (a token) goes around the
+ring over UDP unicast. Whoever is holding it fires a rocket with probability p
+(that's the broadcast -> UDP multicast) and then halves its own p and passes
+the token to the next node. Everything stops once k rounds in a row happen with
+nobody firing.
 
-The application terminates when ``k`` consecutive *rounds* (full laps of the
-token around the ring) contained no single rocket.
+I wrote this so the SAME file works for both tasks - only the command line args
+change:
+  * Aufgabe 1 -> n processes all on 127.0.0.1 (real multicast on loopback)
+  * Aufgabe 2 -> one process per machine, bind 0.0.0.0. multicast if the network
+    forwards it, otherwise --broadcast-mode unicast (n-1 unicasts per rocket)
 
-This same program is used for BOTH:
-  * Aufgabe 1  -- all n processes on localhost (bind 127.0.0.1, real multicast)
-  * Aufgabe 2  -- one process per real machine (bind 0.0.0.0, multicast OR,
-                  as a fallback, n-1 unicasts via ``--broadcast-mode unicast``)
+Kept it single-threaded with a selector loop so I didn't have to deal with locks
+anywhere. Each node has a unicast socket for the TOKEN + the READY handshake (and
+also rockets/TERMINATE when we're in unicast mode). In multicast mode it also
+joins a group and gets ROCKET/TERMINATE there. Node 0 is the coordinator: it
+starts the token, times the rounds, decides when to stop and tells everyone.
 
-Design (single-threaded, selector based -> no locks):
-  * Each node owns a UNICAST socket bound to (bind_host, my_port) used for the
-    TOKEN and the startup READY handshake.  In ``unicast`` broadcast mode the
-    rockets and the TERMINATE also travel over this socket.
-  * In ``multicast`` mode each node additionally joins a multicast group and
-    receives ROCKET / TERMINATE there.
-  * Node 0 is the *coordinator*: it owns the round boundary, measures round
-    times, evaluates the termination condition and tells everybody to stop.
-
-Message types (newline-free JSON datagrams):
+Messages are just tiny JSON datagrams:
   {"t":"READY","id":i}
   {"t":"TOKEN","round":r,"firings":f}
   {"t":"ROCKET","src":i,"seq":s,"round":r}
-  {"t":"TERMINATE","rounds":R,"firings":F}   # carries the authoritative totals
+  {"t":"TERMINATE","rounds":R,"firings":F}
 
-The ROCKET carries a per-source sequence number so that a receiver can detect
-*lost* multicasts (gaps) -- this is used in the Aufgabe 4 consistency analysis.
+The per-source seq number on a ROCKET is what lets a receiver notice it missed a
+multicast (a gap in the sequence) - that's the whole basis for the Aufgabe 4
+consistency stuff.
 """
 from __future__ import annotations
 
@@ -50,7 +45,7 @@ import subprocess
 
 
 def log(node_id: int, msg: str) -> None:
-    # stderr keeps stdout clean for any machine-readable output
+    # everything goes to stderr so stdout stays clean (the stats are JSON files)
     print(f"[node {node_id:>3}] {msg}", file=sys.stderr, flush=True)
 
 
@@ -71,14 +66,14 @@ class FireworkNode:
         self.verbose = args.verbose
 
         # --- peer table: id -> (host, port) ----------------------------------
-        # format of --peers: "id:host:port,id:host:port,..."
+        # --peers looks like "0:127.0.0.1:40000,1:127.0.0.1:40001,..."
         self.peers: dict[int, tuple[str, int]] = {}
         for entry in args.peers.split(","):
             pid, host, port = entry.split(":")
             self.peers[int(pid)] = (host, int(port))
         assert len(self.peers) == self.n, "peer table size != n"
 
-        self.successor = (self.id + 1) % self.n
+        self.successor = (self.id + 1) % self.n     # who I forward the token to
         self.is_coordinator = (self.id == 0)
 
         # multicast config
@@ -86,7 +81,8 @@ class FireworkNode:
         self.mc_port = args.mc_port
         self.mc_iface = args.mc_iface
 
-        # deterministic but per-node randomness
+        # seed per node so every node is random but the whole run is still
+        # reproducible (handy when comparing against the sim_model twin).
         self.rng = random.Random((self.seed * 1_000_003) ^ self.id)
 
         # ---- statistics ------------------------------------------------------
@@ -110,9 +106,9 @@ class FireworkNode:
 
         self._setup_sockets()
         self.sel = selectors.DefaultSelector()
-        self.sel.register(self.usock, selectors.EVENT_READ, self._on_unicast)
+        self.sel.register(self.usock, selectors.EVENT_READ, self._on_datagram)
         if self.mode == "multicast":
-            self.sel.register(self.msock, selectors.EVENT_READ, self._on_multicast)
+            self.sel.register(self.msock, selectors.EVENT_READ, self._on_datagram)
         # play a sound when firing a rocket? (platform-dependent)
         self.play_sound = args.play_sound
 
@@ -138,8 +134,12 @@ class FireworkNode:
                                socket.inet_aton(self.mc_iface))
             self.msock.setsockopt(socket.IPPROTO_IP,
                                   socket.IP_ADD_MEMBERSHIP, mreq)
-            # outgoing multicast on the chosen interface, local-only (ttl small),
-            # loopback ON so the sender also sees its own rocket (uniform delivery)
+            # this part took me a while to get right:
+            #  - MULTICAST_IF: send out of the interface we actually want
+            #  - MULTICAST_TTL: 0 = never leaves this host (fine for Aufgabe 1);
+            #    Aufgabe 2 bumps it via the FIREWORK_MC_TTL env var
+            #  - MULTICAST_LOOP=1: so the sender ALSO receives its own rocket,
+            #    which means every node (incl. the firer) sees the same set
             self.msock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF,
                                   socket.inet_aton(self.mc_iface))
             self.msock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL,
@@ -156,9 +156,12 @@ class FireworkNode:
 
     def _broadcast(self, obj: dict) -> None:
         if self.mode == "multicast":
+            # one datagram, the network copies it to everyone in the group
             self.msock.sendto(json.dumps(obj).encode(),
                               (self.mc_group, self.mc_port))
-        else:  # unicast fan-out to every node (incl. self -> uniform delivery)
+        else:
+            # no multicast available -> just send n-1 (well, n incl. ourselves
+            # so the firer sees it too) separate unicasts. Costs O(n) per rocket.
             for pid in self.peers:
                 self._send_to(pid, obj)
 
@@ -167,25 +170,24 @@ class FireworkNode:
         self.rockets_sent += 1
         self._broadcast({"t": "ROCKET", "src": self.id,
                          "seq": self._seq, "round": self.total_rounds})
+        # purely for fun in the live demo - makes a noise when a rocket goes off.
+        # off by default, and wrapped in try/except so it never breaks a real run.
         if self.play_sound:
-            # Non-blocking: on macOS use `say` to announce a boom; fall back
-            # to bell character if unavailable.
             try:
-                # use a short, low-latency TTS as a simple cross-machine option
-                subprocess.Popen(["say", "Boom"])
+                subprocess.Popen(["say", "Boom"])      # works on macOS
             except Exception:
                 try:
-                    print("\a", end="", flush=True)
+                    print("\a", end="", flush=True)    # otherwise just the bell
                 except Exception:
                     pass
 
     # ----------------------------------------------------------- token logic
     def _take_turn(self, firings_in_round: int) -> int:
-        """Maybe fire, then decay p. Returns updated firing count for this lap."""
+        """Maybe fire a rocket, then halve p. Returns the updated lap firing count."""
         if self.rng.random() < self.p:
             self._fire_rocket()
             firings_in_round += 1
-        self.p *= self.decay
+        self.p *= self.decay                           # p shrinks every turn
         return firings_in_round
 
     def _start_round(self) -> None:
@@ -211,7 +213,10 @@ class FireworkNode:
     def _terminate_ring(self) -> None:
         term = {"t": "TERMINATE", "rounds": self.total_rounds,
                 "firings": self.total_firings}
-        for _ in range(3):                          # repeat for UDP reliability
+        # UDP can drop this, so just send it a few times. Not bulletproof (see
+        # the report - if all 3 get lost a node falls back on its idle timeout)
+        # but good enough in practice.
+        for _ in range(3):
             self._broadcast(term)
             time.sleep(0.01)
         log(self.id, f"TERMINATE after {self.total_rounds} rounds, "
@@ -224,7 +229,12 @@ class FireworkNode:
         if t == "READY":
             if self.is_coordinator:
                 self._ready_nodes.add(m["id"])
-                if not self._started and len(self._ready_nodes) >= self.n - 1:
+                # _ready_nodes already contains us (id 0), so we need the whole
+                # set to reach n before every member is actually listening.
+                # NOTE: had >= self.n - 1 here at first and the ring would start
+                # one member too early -> the token to that last node got lost on
+                # a slow start (really bit me in Aufgabe 2). Wait for all n.
+                if not self._started and len(self._ready_nodes) >= self.n:
                     self._started = True
                     log(self.id, f"all {self.n} nodes ready -> starting token")
                     self._start_round()
@@ -254,29 +264,27 @@ class FireworkNode:
             self._last_seq[src] = seq
         self.rockets_received += 1
 
-    def _on_unicast(self, sock: socket.socket) -> None:
-        data, _ = sock.recvfrom(4096)
-        self._handle(json.loads(data.decode()))
-
-    def _on_multicast(self, sock: socket.socket) -> None:
+    def _on_datagram(self, sock: socket.socket) -> None:
+        # same handling no matter which socket it came in on (unicast token vs
+        # multicast rocket) - the message's "t" field tells us what it is.
         data, _ = sock.recvfrom(4096)
         self._handle(json.loads(data.decode()))
 
     # ------------------------------------------------------------------ run
     def run(self) -> None:
         if not self.is_coordinator:
-            # tell the coordinator we are up and listening
-            self._send_to(0, {"t": "READY", "id": self.id})
+            self._send_to(0, {"t": "READY", "id": self.id})   # "hey coord, I'm up"
         else:
             self._ready_nodes.add(0)
-            if self.n == 1:                          # degenerate ring of one
+            if self.n == 1:                          # silly edge case: ring of 1
                 self._started = True
                 self._start_round()
 
-        startup_deadline = time.time() + 30.0        # max time to bootstrap ring
+        startup_deadline = time.time() + 30.0        # give up bootstrapping after 30s
         while not self._terminated:
-            # While bootstrapping, a member retransmits READY quickly (its first
-            # READY may have been lost because the coordinator was not bound yet).
+            # while we're still waiting for the first token, keep re-sending READY
+            # every 0.2s - the first one can get lost if the coordinator hadn't
+            # bound its socket yet when we sent it.
             bootstrapping = (not self.is_coordinator) and (not self._seen_token)
             timeout = 0.2 if bootstrapping else self.idle_timeout
             events = self.sel.select(timeout=timeout)
@@ -284,10 +292,11 @@ class FireworkNode:
                 if bootstrapping and time.time() < startup_deadline:
                     self._send_to(0, {"t": "READY", "id": self.id})
                     continue
+                # nothing happened for a while -> assume the ring is done and bail
                 log(self.id, "idle timeout -> assuming finished")
                 break
             for key, _ in events:
-                key.data(key.fileobj)
+                key.data(key.fileobj)                # dispatch to _on_datagram
                 if self._terminated:
                     break
         self._write_stats()
@@ -318,8 +327,8 @@ class FireworkNode:
 
 
 def args_ttl_default() -> int:
-    # 0 => never leaves the host (Aufgabe 1). For Aufgabe 2 on a real LAN we
-    # raise it via the environment variable below.
+    # TTL 0 = the multicast packet never leaves this machine (what we want for
+    # Aufgabe 1 on loopback). deploy.sh sets FIREWORK_MC_TTL=1 for a real LAN.
     return int(os.environ.get("FIREWORK_MC_TTL", "0"))
 
 

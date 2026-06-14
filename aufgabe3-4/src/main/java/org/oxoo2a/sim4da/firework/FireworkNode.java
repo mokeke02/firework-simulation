@@ -12,29 +12,21 @@ import java.util.Random;
 import java.util.Set;
 
 /**
- * Firework ring node for the sim4da simulator (Aufgabe 3 &amp; 4).
- * <p>
- * A token circulates 0 -&gt; 1 -&gt; ... -&gt; n-1 -&gt; 0 (point-to-point
- * {@link #send}). The holder fires a rocket with probability {@code p}
- * ({@link #broadcast}), halves {@code p}, and forwards the token. Node 0 is the
- * coordinator: it owns the round boundary, measures real round times with
- * {@link System#nanoTime()}, evaluates the termination rule (k consecutive
- * empty rounds) and broadcasts TERMINATE.
- * <p>
- * The SAME class realises both assignments:
- * <ul>
- *   <li><b>Aufgabe 3</b> -- {@code reconcile=false}: plain protocol. Each node
- *       merely <em>detects</em> inconsistency (per-source sequence gaps in the
- *       received broadcast stream, plus a final self-check vs. the
- *       coordinator's authoritative total).</li>
- *   <li><b>Aufgabe 4</b> -- {@code reconcile=true}: the token additionally
- *       carries the log of rocket ids fired in the current and previous round.
- *       Every node merges that log into its own "seen" set, so a rocket lost on
- *       the unreliable broadcast is recovered within one extra lap. This
- *       <em>avoids</em> the inconsistency: all nodes converge to the exact same
- *       set of observed rockets. {@code loss} injects artificial broadcast loss
- *       to exercise the mechanism.</li>
- * </ul>
+ * Firework ring node running inside the sim4da simulator (Aufgabe 3 + 4).
+ *
+ * Same idea as the UDP version, just on top of sim4da instead of real sockets:
+ * the token goes 0 -> 1 -> ... -> n-1 -> 0 with {@link #send}, whoever holds it
+ * fires a rocket with prob. p via {@link #broadcast}, halves p, forwards the
+ * token. Node 0 is the coordinator - it times the rounds with
+ * {@link System#nanoTime()} and stops after k empty rounds.
+ *
+ * I reused ONE class for both tasks via the {@code reconcile} flag:
+ *   - Aufgabe 3 (reconcile=false): plain version. A node can only *detect* that
+ *     it missed a rocket (gap in the per-source seq numbers).
+ *   - Aufgabe 4 (reconcile=true): the token also carries a little log of the
+ *     rocket ids fired recently. Each node merges that into its "seen" set as
+ *     the token passes, so anything lost on the (lossy) broadcast gets repaired
+ *     within one extra lap. {@code loss} fakes broadcast loss to show this off.
  */
 public class FireworkNode extends Node {
 
@@ -75,6 +67,11 @@ public class FireworkNode extends Node {
         this.loss = loss;
         this.successor = "node-" + ((id + 1) % n);
         this.coordinator = (id == 0);
+        // NOTE: same seeding formula as the Python twin, BUT java.util.Random and
+        // Python's random are different generators, so the exact rocket counts
+        // won't line up between them - only the behaviour (rounds grow slowly,
+        // rockets ~ n, consistency) does. The numbers in the report come from the
+        // Python side (sim_model.py + the real UDP run), which DO match each other.
         this.rng = new Random((seed * 1_000_003L) ^ id);
     }
 
@@ -176,7 +173,9 @@ public class FireworkNode extends Node {
         seen.add(src + "-" + s);
     }
 
-    /** Merge a token log into our seen-set, recovering missed rockets. */
+    /** Merge a token log into our seen-set. This is the actual "repair": any
+     * rocket id in the log that we hadn't seen (because the broadcast got lost)
+     * gets added here, and we count it as recovered. */
     private void reconcile(String log) {
         if (log == null || log.isEmpty()) return;
         for (String e : log.split(";")) {

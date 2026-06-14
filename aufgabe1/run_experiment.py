@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 """
-run_experiment.py  --  Automated setup & execution of growing rings (Aufgabe 1).
+run_experiment.py -- spins up the whole ring for me so I don't have to launch
+n terminals by hand (Aufgabe 1).
 
-Launches n local processes (localhost / 127.0.0.1), waits for the distributed
-run to terminate, aggregates the per-node statistics and writes a CSV + JSON
-summary.  Sweeps n = 2, 4, 8, 16, ... and reports, per n:
-
+It starts n copies of firework_node.py on 127.0.0.1, waits until they all exit,
+reads back the per-node JSON stat files and boils them down into one CSV + JSON
+summary. For each n it reports:
     * total token rounds (laps)
-    * total multicasts (rockets) sent
-    * min / avg / max round time   [ms]
-    * consistency: rockets fired vs. min/max rockets observed by any node
+    * total rockets (= multicasts) fired
+    * min / avg / max round time in ms
+    * a consistency check: rockets fired vs. the min/max any node actually saw
 
-It also probes the largest n that still completes (Aufgabe 1a) by doubling n
-until a run fails (timeout / resource exhaustion) and then reports the last
-successful value.
+For part (a) ("biggest n that still works") it just keeps doubling n until a run
+fails and reports the last good value. Doubling only hits powers of 2 though, so
+--refine then binary-searches the gap to find the real ceiling (that's how I got
+384 and not just 256).
 
 Usage:
     python3 run_experiment.py --max-n 256
+    python3 run_experiment.py --max-n 512 --refine        # finds 384
     python3 run_experiment.py --ns 2,4,8,16,32 --p0 0.5 --k 3
 """
 from __future__ import annotations
@@ -37,13 +39,15 @@ NODE = os.path.join(HERE, "firework_node.py")
 
 
 def build_peers(n: int, base_port: int) -> str:
+    # all on localhost, consecutive ports starting at base_port
     return ",".join(f"{i}:127.0.0.1:{base_port + i}" for i in range(n))
 
 
 def run_ring(n: int, p0: float, decay: float, k: int, base_port: int,
              mode: str, results_dir: str, timeout: float, seed: int,
              verbose: bool) -> dict | None:
-    """Launch one ring of size n; return aggregated stats or None on failure."""
+    """Launch one ring of size n. Returns the aggregated stats, or None if it
+    didn't finish in time (that's our signal that n is too big)."""
     if os.path.isdir(results_dir):
         shutil.rmtree(results_dir)
     os.makedirs(results_dir, exist_ok=True)
@@ -60,12 +64,13 @@ def run_ring(n: int, p0: float, decay: float, k: int, base_port: int,
     if verbose:
         common.append("--verbose")
 
-    # Start members first, coordinator (id 0) last so READY arrives reliably.
+    # members first, coordinator (id 0) LAST. that way everyone else is already
+    # listening by the time the coordinator starts firing off the token.
     try:
         for i in range(n - 1, -1, -1):
             p = subprocess.Popen(common + ["--id", str(i)])
             procs.append(p)
-    except OSError as e:           # e.g. cannot fork / too many processes
+    except OSError as e:           # ran out of processes / can't fork -> n too big
         for p in procs:
             p.kill()
         print(f"  ! n={n}: failed to launch processes: {e}")
@@ -76,7 +81,7 @@ def run_ring(n: int, p0: float, decay: float, k: int, base_port: int,
     while alive and time.time() < deadline:
         time.sleep(0.05)
         alive = {p for p in alive if p.poll() is None}
-    if alive:                      # stragglers -> run did not converge
+    if alive:                      # some processes never finished -> ring stalled
         for p in alive:
             p.send_signal(signal.SIGTERM)
         time.sleep(0.3)
@@ -100,10 +105,12 @@ def aggregate(n: int, results_dir: str) -> dict | None:
     total_sent = sum(x["rockets_sent"] for x in nodes)
     recv = [x["rockets_received"] for x in nodes]
     gaps = sum(x["gaps_detected"] for x in nodes)
+    # if seen_min == seen_max == rockets_fired then every node saw every rocket,
+    # i.e. the views are consistent. on loopback this is always true.
     return {
         "n": n,
         "total_rounds": coord["total_rounds"],
-        "total_multicasts": total_sent,           # == total rockets fired
+        "total_multicasts": total_sent,           # one multicast per rocket fired
         "round_time_min_ms": round(coord["round_time_min_ms"], 4),
         "round_time_avg_ms": round(coord["round_time_avg_ms"], 4),
         "round_time_max_ms": round(coord["round_time_max_ms"], 4),
@@ -134,6 +141,10 @@ def main() -> None:
                          "processes were started by hand on real machines)")
     ap.add_argument("--results-dir", default="",
                     help="directory of node_*.json files for --aggregate-only")
+    ap.add_argument("--refine", action="store_true",
+                    help="after the power-of-2 sweep, binary-search between the "
+                         "last n that worked and the first that failed to pin down "
+                         "the *real* max n (this is how we got 384, not just 256)")
     a = ap.parse_args()
 
     if a.aggregate_only:
@@ -163,6 +174,7 @@ def main() -> None:
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     rows: list[dict] = []
     max_ok = 0
+    first_fail = 0          # remember where the doubling sweep hit the wall
     print(f"Sweeping n in {ns}  (mode={a.mode}, p0={a.p0}, decay={a.decay}, k={a.k})\n")
     for n in ns:
         print(f"n = {n:>4} ...", end=" ", flush=True)
@@ -172,6 +184,7 @@ def main() -> None:
                        a.timeout, a.seed, a.verbose)
         if res is None:
             print(f"FAILED (wall {time.time()-t0:.1f}s) -> stopping max-n search")
+            first_fail = n
             break
         max_ok = n
         rows.append(res)
@@ -181,6 +194,28 @@ def main() -> None:
               f"{res['round_time_avg_ms']:.3f}/{res['round_time_max_ms']:.3f} "
               f"seen[min/max]={res['rockets_seen_min']}/{res['rockets_seen_max']} "
               f"gaps={res['gaps_detected']}")
+
+    # The doubling sweep only ever tries powers of 2, so the best it can tell us
+    # is "256 ok, 512 fails". --refine bisects that gap to find the actual ceiling
+    # (e.g. 384). lo always works, hi always fails; stop when they're adjacent.
+    if a.refine and max_ok and first_fail and first_fail - max_ok > 1:
+        print(f"\nRefining max n between {max_ok} (ok) and {first_fail} (fail)...")
+        lo, hi = max_ok, first_fail
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            print(f"  trying n = {mid:>4} ...", end=" ", flush=True)
+            res = run_ring(mid, a.p0, a.decay, a.k, a.base_port + mid, a.mode,
+                           os.path.join(HERE, "results", f"run_n{mid}"),
+                           a.timeout, a.seed, a.verbose)
+            if res is None:
+                print("fail")
+                hi = mid
+            else:
+                print("ok")
+                lo = mid
+                max_ok = mid
+                rows.append(res)
+        rows.sort(key=lambda r: r["n"])      # keep the summary in ascending n order
 
     if rows:
         with open(a.out, "w", newline="") as f:

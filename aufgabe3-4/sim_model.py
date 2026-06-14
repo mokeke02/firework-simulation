@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
-sim_model.py -- a faithful, sequential Python twin of the sim4da FireworkNode
-logic (Aufgabe 3/4). It exists ONLY to validate the algorithm that is encoded
-in Java (which needs the cloned sim4da repo to compile). It reproduces, step
-for step, the token round structure, the lossy broadcast, the per-source gap
-detection and the token-carried reconciliation with one-extra-lap dissemination.
+sim_model.py -- a plain-Python copy of the sim4da FireworkNode logic.
+
+Reason this exists: the Java needs the cloned sim4da repo (and javac) to build,
+which I couldn't always do, so I rebuilt the exact same algorithm here as a
+single-threaded loop to actually get numbers out for Aufgabe 3/4. It does the
+same token rounds, the same lossy broadcast, the same per-source gap detection
+and the same token-carried reconciliation (with the one-extra-lap trick). Same
+seeding as firework_node.py, so the n-sweep here matches the real UDP run.
+
+    python3 sim_model.py              # Aufgabe 3 scaling sweep
+    python3 sim_model.py consistency  # Aufgabe 4 loss + reconcile experiment
 """
 from __future__ import annotations
 import random

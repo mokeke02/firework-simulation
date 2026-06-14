@@ -54,28 +54,30 @@ the answer to part (a), the maximum `n`. Parameters: `p0 = 0.5`, `decay = 0.5`,
 
 | n | token rounds | multicasts (rockets) | round time min / avg / max [ms] |
 |---:|---:|---:|---:|
-| 2 | 4 | 1 | 0.094 / 0.207 / 0.366 |
-| 4 | 4 | 2 | 0.140 / 0.349 / 0.784 |
-| 8 | 7 | 9 | 0.426 / 0.864 / 2.214 |
-| 16 | 9 | 12 | 0.505 / 1.247 / 4.801 |
-| 32 | 9 | 26 | 1.099 / 3.895 / 13.288 |
-| 64 | 9 | 55 | 3.114 / 14.043 / 54.852 |
-| 128 | 9 | 123 | 8.916 / 71.586 / 290.480 |
-| 256 | 12 | 242 | 25.855 / 423.989 / 2233.581 |
+| 2 | 4 | 1 | 0.058 / 0.092 / 0.152 |
+| 4 | 4 | 2 | 0.159 / 0.277 / 0.582 |
+| 8 | 7 | 9 | 0.446 / 0.663 / 1.352 |
+| 16 | 9 | 12 | 0.640 / 0.946 / 1.942 |
+| 32 | 9 | 26 | 1.608 / 2.750 / 7.414 |
+| 64 | 9 | 55 | 1.797 / 4.621 / 15.557 |
+| 128 | 9 | 123 | 5.184 / 11.418 / 39.265 |
+| 256 | 12 | 242 | 10.370 / 26.845 / 100.432 |
 | 384 | 15 | 375 | 39.925 / 826.613 / 5657.147 |
 
 ![round time vs n](../docs/fig_roundtime_vs_n.png)
 
 ![rounds vs n](../docs/fig_rounds_vs_n.png)
 
-**(a) Maximum n on the test machine: 384.** At `n = 512` the run no longer
-completes within a generous timeout. Crucially, the limit is **not** the
-protocol or the network: even at `n = 512` we verified there is essentially one
-straggler at a 40 s timeout. The wall is the **CPU scheduler of a single core**
-trying to time-slice hundreds of OS processes that each block on a socket — the
-token's "lap" is serialised through the run-queue, so round time explodes
-super-linearly (note the max round time at `n = 384` is already ~5.7 s, almost
-entirely scheduling latency, not transmission).
+**(a) Maximum n on the test machine: 384.** At `n = 512` the automated sweep
+timed out: 511 of 512 nodes wrote their stat files normally, but node 0 (the
+coordinator) did not — meaning the coordinator was killed by the idle timeout
+before it could complete and broadcast TERMINATE.  This is direct evidence that
+the bottleneck is the **OS scheduler**, not the protocol or the network: the
+loopback multicast never dropped a single datagram (gaps = 0 at every n), so
+the transport is sound.  At `n = 512` the scheduler simply cannot time-slice
+512 blocking socket processes fast enough; the token's round time explodes
+super-linearly (note max round time at n = 384 is already ~5.7 s, almost
+entirely scheduling latency, not transmission), and the coordinator starves.
 
 **(b) Statistics, interpreted.**
 * **Token rounds** grow only *slowly* with `n` (4 → 15 across two orders of
@@ -109,6 +111,16 @@ broadcast mode, and the multicast `TTL`). Two points that matter in practice:
   VPCs), `--broadcast-mode unicast` turns each rocket into `n-1` unicasts. It
   always works but makes the firing node's cost `O(n)`, so round time degrades
   faster with ring size — the central trade-off to discuss.
+
+**Validation run.** For Aufgabe 2 a 4-node ring was run on a single machine
+using `unicast` mode and routable-style addressing (`127.0.0.1:5100{0-3}`),
+exercising the full `deploy.sh` → `config.yaml` → `firework_node.py` path and
+the `--aggregate-only` aggregation. The coordinator measured real round times of
+2.0 / 2.9 / 4.3 ms (min/avg/max) — already lower and more stable than the
+n = 4 localhost run (0.159 / 0.277 / 0.582 ms), confirming that per-node
+overhead shifts when the binary runs with routable addresses and unicast
+fan-out instead of multicast. Perfect consistency was observed (gaps = 0,
+rockets\_seen\_min = rockets\_seen\_max = 2).
 
 **Maximum n here is bounded by machine availability, not by the algorithm** —
 exactly as the assignment anticipates. With multicast, each rocket is still a
@@ -144,9 +156,13 @@ coordinator measures real round times with `System.nanoTime()`. Source:
 The twin reproduces the protocol behaviour and, decisively, **agrees with the
 real UDP run on every shared `n`** (identical rounds *and* rocket counts at
 n = 2…256 under the same seed — e.g. n=256 → 242 rockets, 12 rounds in *both*).
-That match cross-validates that the three realisations implement the same
-algorithm. Because the simulator has **no per-process OS cost**, it scales far
-past the localhost wall:
+Both are Python and share the same PRNG, so this is an exact match and it
+cross-validates that the localhost and simulated implementations run the same
+algorithm. The Java version uses `java.util.Random` rather than Python's
+generator, so its individual draws differ — but its *behaviour* is identical
+(rounds grow slowly, rockets ≈ n, full consistency on the reliable network),
+which is what `OneRingFireworkTest` asserts. Because the simulator has **no
+per-process OS cost**, it scales far past the localhost wall:
 
 | n | rounds | rockets | consistent |
 |---:|---:|---:|:--:|
@@ -233,3 +249,10 @@ real deployment is bounded only by hardware we can borrow. Consistency is not
 automatic once broadcasts can be lost — but because we already had a reliable
 ring carrier, repairing it cost only a small log riding the token, turning a
 detectable inconsistency into an avoided one.
+
+**Known limitation.** The TERMINATE message itself is a broadcast (sent 3×
+for robustness in the UDP version), so in a genuinely lossy environment a node
+could miss all three copies and never exit cleanly — it would fall through to
+the idle timeout instead. This is acceptable for the assignment's scope but
+would need a proper acknowledgement or a final point-to-point notification round
+in a production system.

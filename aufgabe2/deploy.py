@@ -1,25 +1,17 @@
 #!/usr/bin/env python3
 """Aufgabe 2 deploy helper.
 
-Reads a peer-list config (see config.example.yaml) and, for a given node id,
-prints (or with --run, executes) the exact command line that starts this
-machine's ring process from the shared aufgabe1/firework_node.py.
+The point of Aufgabe 2 is that I DIDN'T have to write any new node code - the
+same firework_node.py from Aufgabe 1 already takes its id, peer list, bind
+address and broadcast mode from the command line. This script is just the glue:
+it reads config.yaml and, for a given node id, prints (or with --run, exec's)
+the right command line for that machine.
 
-The point of Aufgabe 2 is that NO new node code is needed: the same process
-binary from Aufgabe 1 already supports binding to a routable address, an
-arbitrary peer list and a multicast-or-unicast broadcast mode. This script is
-purely the "glue" that turns the config into the right invocation on each box.
-
-Typical use, on each machine in turn:
-
-    # machine that should be node 0:
-    ./deploy.sh 0 --run
-    # machine that should be node 1:
-    ./deploy.sh 1 --run
+On each machine in turn:
+    ./deploy.sh 0 --run     # the box that should be node 0 (coordinator)
+    ./deploy.sh 1 --run     # node 1
     ...
-
-Or print everything for a dry run / copy-paste:
-
+or print every command at once for a dry run / copy-paste:
     ./deploy.sh --all
 """
 import argparse
@@ -33,10 +25,12 @@ NODE = os.path.join(HERE, "..", "aufgabe1", "firework_node.py")
 
 
 def load_config(path):
-    """Tiny dependency-free YAML-subset parser for our specific schema.
+    """Mini YAML reader for just our config layout.
 
-    Avoids requiring PyYAML on every lab machine. Understands exactly the
-    structure in config.example.yaml (no anchors, flow style, etc.)."""
+    I didn't want to make everyone pip-install PyYAML on the lab machines just
+    to read a 4-line config, so this parses exactly the shape in
+    config.example.yaml (top-level keys, a couple of nested sections, and the
+    peers list). Don't throw anything fancy at it (anchors, inline lists, etc.)."""
     cfg = {"multicast": {}, "params": {}, "peers": []}
     section = None
     cur_peer = None

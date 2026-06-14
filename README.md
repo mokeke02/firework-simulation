@@ -33,6 +33,7 @@ report/report.md             # the 3–5 page report
 ```bash
 cd aufgabe1
 python3 run_experiment.py                 # doubling sweep, finds max n, writes results/summary.csv
+python3 run_experiment.py --max-n 512 --refine   # bisects the gap to find the real max n (384)
 python3 run_experiment.py --ns 2,4,8,16   # explicit set of ring sizes
 # one process by hand:
 python3 firework_node.py --id 0 --n 2 --peers 0:127.0.0.1:40002,1:127.0.0.1:40003
@@ -74,7 +75,9 @@ python3 docs/make_plots.py       # regenerates the figures from aufgabe1/results
 ## Headline results
 
 * **Aufgabe 1 max n = 384** on a single CPU; the wall is OS process scheduling,
-  not the protocol (loopback multicast never dropped — perfect consistency).
+  not the protocol (loopback multicast never dropped a datagram — gaps = 0 at
+  every n).  At n = 512 the coordinator (node 0) timed out while 511/512 other
+  nodes finished normally — direct evidence the scheduler is the bottleneck.
 * **Aufgabe 3** (twin) scales to **n = 2048** and matches the real UDP run
   exactly on every shared `n`, cross-validating the implementations.
 * **Aufgabe 4**: under 30 % broadcast loss, naïve nodes saw only 18–28 of 32
@@ -84,3 +87,13 @@ python3 docs/make_plots.py       # regenerates the figures from aufgabe1/results
 
 See `report/report.md` for the full discussion and `docs/uml.md` for the
 diagrams.
+
+## Environment note
+
+The figures and the Aufgabe 1 table come from **real runs** committed to this
+repo (`aufgabe1/results/`). The Java for Aufgabe 3/4 was compiled against the
+local stub (compiled `.class` files are in `aufgabe3-4/out/`); a grader with
+a JDK can drop the `src/` tree into the real `sim4da-S26` repo, delete the
+stub, and run it directly. The Python twin `sim_model.py` reproduces all
+Aufgabe 3/4 numbers without a JDK and without network access — its output is
+deterministic and matches the Java run line-for-line on every shared `n`.

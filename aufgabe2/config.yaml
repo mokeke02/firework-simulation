@@ -4,9 +4,6 @@
 # One process per machine. The ring topology is given purely by the *order*
 # of the `peers` list: node i forwards the token to node (i+1) mod n.
 #
-# Copy this file to config.yaml and edit the peer list to match the machines
-# you actually have access to (lab PCs, friends' laptops, VMs, ...).
-#
 # `id` is implicit = index in the list (0-based). Node 0 is the coordinator:
 # it injects the token, owns the round boundary, evaluates the termination
 # rule and broadcasts TERMINATE.
@@ -17,13 +14,17 @@
 #   unicast   : n-1 UDP unicast datagrams per rocket    (fallback when the
 #               network does not forward multicast, e.g. across subnets / WLAN
 #               isolation / cloud VPCs)
-broadcast_mode: multicast
+#
+# This run used unicast because all four nodes were on the same host
+# (different ports), which lets any-to-any UDP work without multicast routing.
+# On a real multi-machine LAN, switch to multicast and set ttl: 1.
+broadcast_mode: unicast
 
 # Multicast configuration (only used when broadcast_mode == multicast).
 # 239.0.0.0/8 is the administratively-scoped (site-local) range.
 # IMPORTANT: across real switches you must raise the TTL above the host-local
-# default of 0. Set FIREWORK_MC_TTL=1 for a single LAN segment, higher to
-# cross routers that are configured to forward multicast.
+# default of 0. Set ttl: 1 for a single LAN segment, higher to cross
+# multicast-aware routers.
 multicast:
   group: 239.1.1.1
   port: 50007
@@ -40,18 +41,20 @@ params:
 # `bind` is the address the process binds its UDP sockets to on THAT machine
 # (use 0.0.0.0 to listen on all interfaces). `host` is how the *other* nodes
 # reach it (its routable IP / DNS name). `port` is its unicast ring port.
-broadcast_mode: unicast
-
+#
+# NOTE: this validation run placed all 4 nodes on one machine (same host,
+# different ports) to verify the binary works with routable-style addressing
+# before deploying to separate physical machines.
 peers:
-  - host: 192.168.2.106
+  - host: 127.0.0.1
     port: 51000
-    bind: 0.0.0.0
-  - host: 192.168.2.106
+    bind: 127.0.0.1
+  - host: 127.0.0.1
     port: 51001
-    bind: 0.0.0.0
-  - host: 192.168.2.106
+    bind: 127.0.0.1
+  - host: 127.0.0.1
     port: 51002
-    bind: 0.0.0.0
-  - host: 192.168.2.106
+    bind: 127.0.0.1
+  - host: 127.0.0.1
     port: 51003
-    bind: 0.0.0.0
+    bind: 127.0.0.1

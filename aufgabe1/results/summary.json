@@ -1,5 +1,5 @@
 {
-  "max_n": 256,
+  "max_n": 384,
   "rows": [
     {
       "n": 2,
@@ -95,6 +95,18 @@
       "rockets_fired": 242,
       "rockets_seen_min": 242,
       "rockets_seen_max": 242,
+      "gaps_detected": 0
+    },
+    {
+      "n": 384,
+      "total_rounds": 15,
+      "total_multicasts": 375,
+      "round_time_min_ms": 39.9246,
+      "round_time_avg_ms": 826.6132,
+      "round_time_max_ms": 5657.1474,
+      "rockets_fired": 375,
+      "rockets_seen_min": 375,
+      "rockets_seen_max": 375,
       "gaps_detected": 0
     }
   ]

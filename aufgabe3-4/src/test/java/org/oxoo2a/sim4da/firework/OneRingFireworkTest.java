@@ -10,9 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Modeled on sim4da's {@code OneRingToRuleThemAll}: build a ring of nodes,
- * run the simulation, assert the protocol invariants. Uses the same package as
- * the real simulator so it drops directly into the cloned repo's test tree.
+ * Tests for the firework node, written the same way as sim4da's
+ * {@code OneRingToRuleThemAll}: build a ring, run the simulation, then check the
+ * invariants hold. Lives in the same package as the simulator so it drops
+ * straight into the cloned repo's test tree.
  */
 class OneRingFireworkTest {
 
