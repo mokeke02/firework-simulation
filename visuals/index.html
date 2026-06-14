@@ -108,6 +108,11 @@
   .log .round { color: #06c; }
   .log .term { color: #080; }
 
+  .log {
+    margin-top: 16px;
+    height: 120px;
+  }
+
   footer { margin-top: 20px; color: #777; font-size: 13px; line-height: 1.5; text-align: center; }
   footer b { color: #333; }
 </style>
@@ -176,13 +181,13 @@
         <div id="hiwrap"></div>
       </div>
 
-      <div class="log" id="log"></div>
     </div>
   </div>
+  <div class="log" id="log"></div>
 </div>
 
 <script>
-const boomAudio = new Audio('boom2.wav');
+const boomAudio = new Audio('faah.wav');
 boomAudio.preload = 'auto';
 boomAudio.volume = 0.9;
 function playBoom(){
@@ -455,6 +460,7 @@ function playBoom(){
   function renderHiScores(data, name) {
     let rows = [];
     if (Array.isArray(data)) rows = data;
+    else if (data && data.rows && Array.isArray(data.rows)) rows = data.rows;
     else if (data && typeof data === 'object') {
       for (const key in data) {
         const v = data[key];
@@ -462,12 +468,12 @@ function playBoom(){
       }
     }
     rows = rows.map(v => ({
-      n: +pick(v, ['n','N','nodes']),
-      rounds: pick(v, ['rounds','total_rounds','totalRounds']),
-      rockets: pick(v, ['rockets','multicasts','total_multicasts','firings','total_firings']),
-      avg: pick(v, ['avg_ms','mean_ms','avg','mean_round_ms']),
-      max: pick(v, ['max_ms','max','max_round_ms']),
-    })).filter(v => !isNaN(v.n)).sort((a,b)=>a.n-b.n);
+    n: +pick(v, ['n','N','nodes']),
+    rounds: pick(v, ['rounds','total_rounds','totalRounds']),
+    rockets: pick(v, ['rockets','total_multicasts','multicasts','firings']),
+    avg: pick(v, ['avg_ms','round_time_avg_ms','mean_ms','avg']),
+    max: pick(v, ['max_ms','round_time_max_ms','max']),
+  })).filter(v => !isNaN(v.n)).sort((a,b)=>a.n-b.n);
     if (!rows.length) { el.loadnote.textContent = 'no rows found'; return; }
     const maxN = Math.max(...rows.map(r=>r.n));
     el.loadnote.textContent = name + ' \u2713';
