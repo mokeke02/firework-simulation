@@ -85,7 +85,7 @@ python3 docs/make_plots.py       # regenerates the figures from aufgabe1/results
   all 32 rockets**. Termination agreement holds regardless because it rides the
   reliable token.
 
-See `report/report.md` for the full discussion and `docs/uml.md` for the
+See `report/Bericht.pdf` for the full discussion and `docs/uml.md` for the
 diagrams.
 
 ## Environment note
