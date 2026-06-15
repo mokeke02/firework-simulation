@@ -5,8 +5,6 @@ A logical ring of `n` processes passes a token; the token holder fires a
 forwards the token. The system terminates after `k` consecutive rounds with no
 rocket. Implemented in three settings plus a consistency mechanism.
 
-> No personal data is contained in this repository (per the submission rules).
-
 ## Repository layout
 
 ```
