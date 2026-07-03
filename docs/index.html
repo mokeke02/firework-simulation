@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verteilte Systeme 1 Visualisierung</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f2f2f2;
+    color: #1a1a1a;
+    font-size: 14px;
+    line-height: 1.4;
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px; }
+
+  /* ---- masthead ---- */
+  .masthead { margin-bottom: 20px; }
+  .masthead h1 { font-size: 22px; font-weight: bold; margin-bottom: 4px; }
+  .masthead .sub { color: #555; font-size: 14px; }
+  .masthead .sub b { font-weight: bold; color: #1a1a1a; }
+
+  /* ---- layout ---- */
+  .stage { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+  @media (max-width: 880px) { .stage { grid-template-columns: 1fr; } }
+
+  .screen {
+    position: relative;
+    border: 1px solid #999;
+    background: #fff;
+    aspect-ratio: 1 / 0.94;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  .hud-top {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 6px 8px; font-family: monospace; font-size: 12px;
+    color: #333; pointer-events: none;
+  }
+  .hud-top .l, .hud-top .r { color: #333; }
+
+  .legend {
+    position: absolute; left: 8px; bottom: 6px;
+    font-size: 12px; color: #555; display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sq { width: 10px; height: 10px; display: inline-block; }
+
+  .gameover {
+    position: absolute; inset: 0; display: none; place-content: center; text-align: center;
+    background: rgba(255,255,255,0.92); z-index: 5;
+  }
+  .gameover.show { display: grid; }
+  .gameover h2 { font-size: 22px; line-height: 1.3; font-weight: bold; }
+  .gameover p { font-size: 13px; margin-top: 12px; line-height: 1.8; color: #333; }
+  .gameover p b { font-weight: bold; }
+
+  /* ---- side panel ---- */
+  .panel { display: flex; flex-direction: column; gap: 14px; }
+  .box { border: 1px solid #ccc; background: #fff; padding: 12px; }
+  .box h2 { font-size: 13px; font-weight: bold; margin-bottom: 10px; }
+
+  .scoreboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 8px; }
+  .score .k { font-size: 11px; color: #777; text-transform: uppercase; }
+  .score .v { font-size: 22px; line-height: 1; }
+  .score .v small { font-size: 13px; color: #777; }
+
+  .ctrl { margin-bottom: 10px; }
+  .ctrl:last-of-type { margin-bottom: 0; }
+  .ctrl label { display: flex; justify-content: space-between; font-size: 13px; color: #555; margin-bottom: 4px; }
+  .ctrl label .val { color: #1a1a1a; }
+  input[type=range] { width: 100%; }
+  input[type=range]:disabled { opacity: 0.5; }
+
+  .btns { display: flex; gap: 6px; margin-top: 4px; }
+  button {
+    flex: 1; font-size: 13px; padding: 6px 4px; cursor: pointer;
+    background: #e6e6e6; border: 1px solid #999; color: #1a1a1a;
+  }
+  button:hover:not(:disabled) { background: #dadada; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .loadrow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .loadrow input[type=file] { display: none; }
+  .loadbtn { font-size: 12px; padding: 5px 8px; background: #e6e6e6; border: 1px solid #999; cursor: pointer; }
+  .loadbtn:hover { background: #dadada; }
+  .loadnote { font-size: 12px; color: #777; }
+
+  .hiscore { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  .hiscore th, .hiscore td { text-align: right; padding: 3px 5px; border-bottom: 1px solid #eee; }
+  .hiscore th { color: #555; font-size: 12px; text-transform: uppercase; }
+  .hiscore td.n { text-align: left; }
+  .hiscore tr.max td { font-weight: bold; }
+
+  .log {
+    border: 1px solid #ccc; background: #fafafa; padding: 8px 10px;
+    height: 132px; overflow-y: auto; font-family: monospace; font-size: 12px;
+    line-height: 1.4; color: #444;
+  }
+  .log .t { color: #999; }
+  .log .fire { color: #b00; }
+  .log .round { color: #06c; }
+  .log .term { color: #080; }
+
+  .log {
+    margin-top: 16px;
+    height: 120px;
+  }
+
+  footer { margin-top: 20px; color: #777; font-size: 13px; line-height: 1.5; text-align: center; }
+  footer b { color: #333; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="masthead">
+    <h1>Simulated&nbsp;Firework</h1>
+    <div class="sub">a token, a match, and <b>n</b> processes in a ring</div>
+  </div>
+
+  <div class="stage">
+    <div class="screen">
+      <canvas id="c"></canvas>
+      <div class="hud-top">
+        <div class="l">ROUND <span id="hud-round">00</span></div>
+        <div class="r">ROCKETS <span id="hud-rockets">000</span></div>
+      </div>
+      <div class="legend">
+        <span><i class="sq" style="background:#ffd23f"></i>match</span>
+        <span><i class="sq" style="background:#4dd0ff"></i>next</span>
+        <span><i class="sq" style="background:#ff4d6d"></i>fired</span>
+        <span><i class="sq" style="background:#4d4663"></i>idle</span>
+      </div>
+      <div class="gameover" id="gameover">
+        <div>
+          <h2>RING<br>DARK</h2>
+          <p id="go-stats"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="box">
+        <h2>SCORE</h2>
+        <div class="scoreboard">
+          <div class="score"><div class="k">rounds</div><div class="v" id="s-rounds">0</div></div>
+          <div class="score"><div class="k">rockets</div><div class="v" id="s-rockets">0</div></div>
+          <div class="score"><div class="k">empty</div><div class="v" id="s-empty">0<small>/k</small></div></div>
+          <div class="score"><div class="k">last ms</div><div class="v" id="s-rt">&mdash;</div></div>
+          <div class="score"><div class="k">holder</div><div class="v" id="s-holder">&mdash;</div></div>
+          <div class="score"><div class="k">holder p</div><div class="v" id="s-p">&mdash;</div></div>
+        </div>
+      </div>
+
+      <div class="box">
+        <h2>PARAMS</h2>
+        <div class="ctrl"><label>nodes <span class="val" id="v-n">16</span></label><input type="range" id="r-n" min="2" max="48" step="1" value="16"></div>
+        <div class="ctrl"><label>p&#8320; <span class="val" id="v-p0">0.50</span></label><input type="range" id="r-p0" min="0.05" max="1" step="0.05" value="0.5"></div>
+        <div class="ctrl"><label>decay <span class="val" id="v-decay">0.50</span></label><input type="range" id="r-decay" min="0.1" max="0.95" step="0.05" value="0.5"></div>
+        <div class="ctrl"><label>k <span class="val" id="v-k">3</span></label><input type="range" id="r-k" min="1" max="6" step="1" value="3"></div>
+        <div class="ctrl"><label>speed <span class="val" id="v-speed">1x</span></label><input type="range" id="r-speed" min="0.25" max="4" step="0.25" value="1"></div>
+        <div class="btns">
+          <button class="start" id="btn-start">Start</button>
+          <button id="btn-pause" disabled>Pause</button>
+          <button class="reset" id="btn-reset">Reset</button>
+        </div>
+      </div>
+
+      <div class="box">
+        <h2>HIGH SCORES</h2>
+        <div class="loadrow">
+          <label class="loadbtn">LOAD RESULTS<input type="file" id="file" accept=".json"></label>
+          <span class="loadnote" id="loadnote">your summary.json</span>
+        </div>
+        <div id="hiwrap"></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const boomAudio = new Audio('boom.wav');
+boomAudio.preload = 'auto';
+boomAudio.volume = 0.9;
+function playBoom(){
+  try{ boomAudio.currentTime = 0; boomAudio.play().catch(()=>{}); }catch(e){}
+}
+(function () {
+  "use strict";
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const el = {
+    cue: document.getElementById('cue'),
+    rounds: document.getElementById('s-rounds'), rockets: document.getElementById('s-rockets'),
+    empty: document.getElementById('s-empty'), rt: document.getElementById('s-rt'),
+    holder: document.getElementById('s-holder'), p: document.getElementById('s-p'),
+    hudRound: document.getElementById('hud-round'), hudRockets: document.getElementById('hud-rockets'),
+    log: document.getElementById('log'), gameover: document.getElementById('gameover'),
+    goStats: document.getElementById('go-stats'),
+    btnStart: document.getElementById('btn-start'), btnPause: document.getElementById('btn-pause'),
+    btnReset: document.getElementById('btn-reset'),
+    file: document.getElementById('file'), loadnote: document.getElementById('loadnote'),
+    hiwrap: document.getElementById('hiwrap'),
+  };
+  const sliders = {
+    n: document.getElementById('r-n'), p0: document.getElementById('r-p0'),
+    decay: document.getElementById('r-decay'), k: document.getElementById('r-k'),
+    speed: document.getElementById('r-speed'),
+  };
+  const labels = {
+    n: document.getElementById('v-n'), p0: document.getElementById('v-p0'),
+    decay: document.getElementById('v-decay'), k: document.getElementById('v-k'),
+    speed: document.getElementById('v-speed'),
+  };
+
+  const PAL = ['#ff4d6d','#ffd23f','#4dff9e','#4dd0ff','#c77dff','#ff9b3f'];
+
+  let P = { n: 16, p0: 0.5, decay: 0.5, k: 3, speed: 1 };
+  let nodes = [], particles = [], ripples = [];
+  let token = { from: 0, to: 1, t: 0, holder: 0 };
+  let stats = { rounds: 0, rockets: 0, empty: 0 };
+  let running = false, paused = false, finished = false;
+  let roundStart = 0, holdsThisRound = 0, firedThisRound = 0;
+  const SCALE = 5;
+  const TRAVEL_MS = 520;
+  let hopElapsed = 0, lastTs = 0;
+  let W = 0, H = 0;
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    W = Math.max(80, Math.floor(r.width / SCALE));
+    H = Math.max(80, Math.floor(r.height / SCALE));
+    canvas.width = W; canvas.height = H;
+    ctx.imageSmoothingEnabled = false;
+    layout();
+  }
+  function layout() {
+    const cx = W / 2, cy = H / 2, radius = Math.min(W, H) * 0.38;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = -Math.PI/2 + (i/nodes.length) * Math.PI*2;
+      nodes[i].x = Math.round(cx + Math.cos(a)*radius);
+      nodes[i].y = Math.round(cy + Math.sin(a)*radius);
+    }
+  }
+  function buildNodes() {
+    nodes = [];
+    for (let i = 0; i < P.n; i++) nodes.push({ x:0, y:0, p:P.p0, flash:0 });
+    layout();
+  }
+
+  function log(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    el.log.prepend(d);
+    while (el.log.childNodes.length > 80) el.log.removeChild(el.log.lastChild);
+  }
+
+  function holderActs(i) {
+    const node = nodes[i];
+    holdsThisRound++;
+    const fired = Math.random() < node.p;
+    if (fired) {
+      stats.rockets++; firedThisRound++; node.flash = 1;
+      spawnBurst(node.x, node.y); ripples.push({ x:node.x, y:node.y, r:2, life:1 });
+      playBoom();
+      log(`<span class="t">r${stats.rounds+1}</span> node <b style="color:#1a1a1a">${i}</b> <span class="fire">^ ROCKET #${stats.rockets}</span> <span class="t">p=${node.p.toFixed(3)}</span>`);
+    }
+    node.p *= P.decay;
+    if (holdsThisRound > P.n) closeRound();
+  }
+  function closeRound() {
+    stats.rounds++;
+    const rt = performance.now() - roundStart;
+    el.rt.textContent = rt.toFixed(0);
+    if (firedThisRound === 0) stats.empty++; else stats.empty = 0;
+    log(`<span class="round">* round ${stats.rounds}</span> <span class="t">${firedThisRound} fired, ${rt.toFixed(0)}ms, empty ${stats.empty}</span>`);
+    firedThisRound = 0; holdsThisRound = 1; roundStart = performance.now();
+    if (stats.empty >= P.k) terminate();
+  }
+  function terminate() {
+    finished = true; running = false; paused = false;
+    el.btnStart.disabled = false; el.btnStart.textContent = 'Start';
+    el.btnPause.disabled = true;
+    if(el.cue){ el.cue.classList.remove('blink'); el.cue.textContent = 'game over'; }
+    log(`<span class="term">> RING DARK — ${P.k} empty rounds. ${stats.rounds} rounds, ${stats.rockets} rockets.</span>`);
+    el.goStats.innerHTML = `ROUNDS <b>${stats.rounds}</b><br>ROCKETS <b>${stats.rockets}</b><br>NODES <b>${P.n}</b>`;
+    el.gameover.classList.add('show');
+    for (let i = 0; i < Math.min(P.n, 8); i++) {
+      const node = nodes[(i*5) % P.n];
+      setTimeout(() => spawnBurst(node.x, node.y, true), i*120);
+    }
+  }
+
+  function spawnBurst(x, y, big) {
+    const count = big ? 26 : 16;
+    const col = PAL[(Math.random()*PAL.length)|0];
+    const power = big ? 1.6 : 1.15;
+    for (let i = 0; i < count; i++) {
+      const a = (i/count)*Math.PI*2 + Math.random()*0.3;
+      const sp = (0.4 + Math.random()*0.9) * power;
+      particles.push({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+        life:1, decay:0.02 + Math.random()*0.02, col, size: Math.random()<0.4?2:1 });
+    }
+  }
+
+  function frame(ts) {
+    if (!lastTs) lastTs = ts;
+    let dt = ts - lastTs; lastTs = ts; if (dt > 60) dt = 60;
+    if (running && !paused && !finished) {
+      hopElapsed += dt * P.speed;
+      token.t = Math.min(1, hopElapsed / TRAVEL_MS);
+      if (token.t >= 1) {
+        const arrived = token.to; token.holder = arrived; holderActs(arrived);
+        if (!finished) { token.from = arrived; token.to = (arrived+1)%P.n; token.t = 0; hopElapsed = 0; }
+      }
+    }
+    draw(); updatePanel();
+    requestAnimationFrame(frame);
+  }
+  function ease(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+  function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(Math.round(x),Math.round(y),w,h); }
+
+  function draw() {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle = '#241d38';
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i], b = nodes[(i+1)%nodes.length];
+      const steps = Math.max(2, Math.round(Math.hypot(b.x-a.x,b.y-a.y)/3));
+      for (let s = 0; s <= steps; s++) {
+        if (s % 2) continue;
+        const x = a.x + (b.x-a.x)*s/steps, y = a.y + (b.y-a.y)*s/steps;
+        ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+      }
+    }
+
+    for (let i = ripples.length-1; i>=0; i--) {
+      const rp = ripples[i]; rp.r += 0.8*(P.speed*0.5+0.6); rp.life -= 0.03;
+      if (rp.life <= 0) { ripples.splice(i,1); continue; }
+      const seg = 28; ctx.fillStyle = `rgba(255,77,109,${rp.life*0.7})`;
+      for (let s = 0; s < seg; s++) {
+        const ang = (s/seg)*Math.PI*2;
+        px(rp.x + Math.cos(ang)*rp.r, rp.y + Math.sin(ang)*rp.r, 1, 1, ctx.fillStyle);
+      }
+    }
+
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node.flash > 0) {
+        px(node.x-3, node.y-3, 7, 7, `rgba(255,77,109,${node.flash*0.5})`);
+        node.flash -= 0.04;
+      }
+      let c = '#4d4663';
+      if (node.flash > 0.4) c = '#ff4d6d';
+      else if (i === token.to && running && !finished) c = '#4dd0ff';
+      px(node.x-2, node.y-2, 4, 4, c);
+      if (i === 0) {
+        ctx.fillStyle = '#ffd23f';
+        ctx.fillRect(node.x-4, node.y-4, 9, 1); ctx.fillRect(node.x-4, node.y+3, 9, 1);
+        ctx.fillRect(node.x-4, node.y-4, 1, 9); ctx.fillRect(node.x+3, node.y-4, 1, 9);
+      }
+    }
+
+    if (running && !finished) {
+      const a = nodes[token.from], b = nodes[token.to], tt = ease(token.t);
+      const tx = a.x + (b.x-a.x)*tt, ty = a.y + (b.y-a.y)*tt;
+      px(tx-1, ty-1, 3, 3, '#ffd23f');
+      px(tx, ty-2, 1, 1, '#fff');
+    }
+
+    for (let i = particles.length-1; i>=0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.vx *= 0.97; p.vy *= 0.97;
+      p.life -= p.decay;
+      if (p.life <= 0) { particles.splice(i,1); continue; }
+      ctx.globalAlpha = p.life > 0.66 ? 1 : p.life > 0.33 ? 0.6 : 0.3;
+      px(p.x, p.y, p.size, p.size, p.col);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function updatePanel() {
+    el.rounds.textContent = stats.rounds;
+    el.rockets.textContent = stats.rockets;
+    el.empty.innerHTML = stats.empty + '<small>/' + P.k + '</small>';
+    el.hudRound.textContent = String(stats.rounds).padStart(2,'0');
+    el.hudRockets.textContent = String(stats.rockets).padStart(3,'0');
+    if (running && !finished && nodes[token.to]) {
+      el.holder.textContent = token.to; el.p.textContent = nodes[token.to].p.toFixed(2);
+    }
+  }
+
+  function readParams(){ P.n=+sliders.n.value; P.p0=+sliders.p0.value; P.decay=+sliders.decay.value; P.k=+sliders.k.value; P.speed=+sliders.speed.value; }
+  function syncLabels(){
+    labels.n.textContent = sliders.n.value;
+    labels.p0.textContent = (+sliders.p0.value).toFixed(2);
+    labels.decay.textContent = (+sliders.decay.value).toFixed(2);
+    labels.k.textContent = sliders.k.value;
+    labels.speed.textContent = (+sliders.speed.value).toString().replace(/\.0+$/,'') + 'x';
+  }
+  Object.values(sliders).forEach(s => s.addEventListener('input', () => {
+    syncLabels(); if (s === sliders.speed){ readParams(); return; } if (!running) reset();
+  }));
+
+  function start(){
+    if (finished) reset();
+    readParams(); if (nodes.length !== P.n) buildNodes();
+    running = true; paused = false; finished = false;
+    el.gameover.classList.remove('show');
+    if(el.cue){ el.cue.classList.remove('blink'); el.cue.textContent='running'; }
+    roundStart = performance.now(); holdsThisRound = 1;
+    token = { from:0, to:1%P.n, t:0, holder:0 }; hopElapsed = 0;
+    el.btnStart.disabled = true; el.btnPause.disabled = false; el.btnPause.textContent = 'Pause';
+    [sliders.n,sliders.p0,sliders.decay,sliders.k].forEach(s => s.disabled = true);
+    log(`<span class="round">> start</span> <span class="t">n=${P.n} p0=${P.p0} decay=${P.decay} k=${P.k}</span>`);
+    holderActs(0);
+  }
+  function pause(){
+    if(!running) return;
+    paused=!paused;
+    el.btnPause.textContent=paused?'Resume':'Pause';
+    if(el.cue) el.cue.textContent=paused?"paused":"running";
+    if(paused) boomAudio.pause();
+  }
+  function reset(){
+    running=false; paused=false; finished=false;
+    readParams(); buildNodes(); particles=[]; ripples=[];
+    stats={rounds:0,rockets:0,empty:0}; firedThisRound=0; holdsThisRound=0;
+    token={from:0,to:1%P.n,t:0,holder:0};
+    el.rt.textContent='\u2014'; el.holder.textContent='\u2014'; el.p.textContent='\u2014';
+    el.btnStart.disabled=false; el.btnStart.textContent='Start';
+    el.btnPause.disabled=true; el.btnPause.textContent='Pause';
+    el.gameover.classList.remove('show');
+    if(el.cue){ el.cue.classList.add('blink'); el.cue.textContent='press start'; }
+    [sliders.n,sliders.p0,sliders.decay,sliders.k].forEach(s => s.disabled=false);
+    el.log.innerHTML=''; updatePanel();
+  }
+  el.btnStart.addEventListener('click', start);
+  el.btnPause.addEventListener('click', pause);
+  el.btnReset.addEventListener('click', reset);
+  window.addEventListener('resize', resize);
+
+  el.file.addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { try { renderHiScores(JSON.parse(r.result), f.name); } catch (err) { el.loadnote.textContent = 'bad json :('; } };
+    r.readAsText(f);
+  });
+  function pick(o, keys){ for (const k of keys) if (o[k] !== undefined) return o[k]; return undefined; }
+  function renderHiScores(data, name) {
+    let rows = [];
+    if (Array.isArray(data)) rows = data;
+    else if (data && data.rows && Array.isArray(data.rows)) rows = data.rows;
+    else if (data && typeof data === 'object') {
+      for (const key in data) {
+        const v = data[key];
+        if (v && typeof v === 'object') rows.push(Object.assign({ n: +key.replace(/\D/g,'') || v.n }, v));
+      }
+    }
+    rows = rows.map(v => ({
+    n: +pick(v, ['n','N','nodes']),
+    rounds: pick(v, ['rounds','total_rounds','totalRounds']),
+    rockets: pick(v, ['rockets','total_multicasts','multicasts','firings']),
+    avg: pick(v, ['avg_ms','round_time_avg_ms','mean_ms','avg']),
+    max: pick(v, ['max_ms','round_time_max_ms','max']),
+  })).filter(v => !isNaN(v.n)).sort((a,b)=>a.n-b.n);
+    if (!rows.length) { el.loadnote.textContent = 'no rows found'; return; }
+    const maxN = Math.max(...rows.map(r=>r.n));
+    el.loadnote.textContent = name + ' \u2713';
+    let html = '<table class="hiscore"><tr><th>n</th><th>rounds</th><th>rockets</th><th>avg ms</th><th>max ms</th></tr>';
+    for (const r of rows) {
+      const fmt = x => x===undefined||x===null||isNaN(x) ? '\u2014' : (Math.abs(x)>=100?Math.round(x):(+x).toFixed(1));
+      html += `<tr class="${r.n===maxN?'max':''}"><td class="n">${r.n}</td><td>${r.rounds??'\u2014'}</td><td>${r.rockets??'\u2014'}</td><td>${fmt(r.avg)}</td><td>${fmt(r.max)}</td></tr>`;
+    }
+    html += '</table>';
+    el.hiwrap.innerHTML = html;
+  }
+
+  syncLabels(); readParams(); buildNodes(); resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
